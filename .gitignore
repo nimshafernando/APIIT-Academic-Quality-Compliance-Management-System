@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.env
+*.tar.gz
+.DS_Store
+functions/*/node_modules/
+.claude/

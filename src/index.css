@@ -1,0 +1,78 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    @apply text-gray-800 antialiased;
+    font-feature-settings: 'ss01' on, 'cv11' on;
+  }
+  body {
+    @apply bg-brand-grey;
+  }
+  ::selection {
+    @apply bg-brand-teal/25;
+  }
+  /* Thin, brand-tinted scrollbars */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-gray-300/80;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-brand-teal/60;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-primary {
+    @apply btn text-white shadow-glow hover:-translate-y-px hover:shadow-lift;
+    background-image: linear-gradient(135deg, #1fcabf 0%, #19b9af 45%, #0fa093 100%);
+  }
+  .btn-teal {
+    @apply btn-primary;
+  }
+  .btn-secondary {
+    @apply btn border border-gray-200 bg-white text-gray-700 shadow-sm hover:border-brand-teal/40 hover:text-brand-tealDark;
+  }
+  .btn-danger {
+    @apply btn border border-red-200 bg-red-50 text-red-700 hover:bg-red-100;
+  }
+  .btn-ghost {
+    @apply btn text-gray-500 hover:bg-gray-100 hover:text-gray-800;
+  }
+  .input {
+    @apply w-full rounded-xl border border-gray-200 bg-white px-3.5 py-2.5 text-sm shadow-sm transition-colors placeholder:text-gray-400 focus:border-brand-teal focus:outline-none focus:ring-4 focus:ring-brand-teal/15;
+  }
+  .label {
+    @apply mb-1.5 block text-xs font-bold uppercase tracking-wider text-gray-500;
+  }
+  .card {
+    @apply rounded-2xl border border-gray-200/70 bg-white shadow-card;
+  }
+  .card-hover {
+    @apply card transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lift;
+  }
+  .th {
+    @apply px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-400;
+  }
+  .td {
+    @apply px-4 py-3.5 text-sm text-gray-700;
+  }
+  /* Dark hero panel used on dashboards */
+  .hero-dark {
+    @apply relative overflow-hidden rounded-2xl text-white shadow-lift;
+    background:
+      radial-gradient(1200px 400px at 85% -20%, rgba(25, 185, 175, 0.35), transparent 60%),
+      radial-gradient(600px 300px at 10% 120%, rgba(25, 185, 175, 0.18), transparent 60%),
+      linear-gradient(135deg, #0c1d1b 0%, #12302d 60%, #14403c 100%);
+  }
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold;
+  }
+}
