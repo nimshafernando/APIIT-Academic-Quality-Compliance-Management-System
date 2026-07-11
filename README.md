@@ -40,7 +40,7 @@
 
 | Account | Role | What to look at |
 |---|---|---|
-| `hod@apiit.lk` | **Head of Computing** (Dr. Chaman Wijesiriwardana) | Command view: compliance ring, per-level heatmap, escalations, governance, appraisals |
+| `hod@apiit.lk` | Head of Computing | Command view: compliance ring, per-level heatmap, escalations, governance, appraisals |
 | `superadmin@apiit.lk` | Super Admin | Control centre: user management, structure setup, workflow templates, deadline rules |
 | `lecturer@apiit.lk` | Lecturer | Submissions, tasks, returned items, subject-file uploads |
 | `moduleleader@apiit.lk` | Module Leader | First-line approvals + module cards |
