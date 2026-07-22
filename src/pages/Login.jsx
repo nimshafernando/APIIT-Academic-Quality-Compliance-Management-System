@@ -104,7 +104,7 @@ export default function Login() {
             </div>
 
             <p className="relative mt-10 text-[11px] font-medium tracking-wide text-white/30">
-              © {new Date().getFullYear()} APIIT · School of Computing
+              © {new Date().getFullYear()} APIIT
             </p>
           </div>
 
@@ -115,7 +115,7 @@ export default function Login() {
               <img src="/apiitlogo.png" alt="APIIT — Inspire love for learning" className="h-14 w-auto sm:h-16" />
               <span className="mt-4 chip bg-brand-tealLight text-brand-tealDeep ring-1 ring-brand-teal/20 lg:hidden">
                 <Icon name="shield" className="h-3.5 w-3.5" />
-                AQCMS · School of Computing
+                AQCMS
               </span>
               <h2 className="mt-5 text-[22px] font-extrabold tracking-tight text-gray-900 sm:text-2xl">Welcome back</h2>
               <p className="mt-1 text-sm text-gray-500">Sign in with your institutional account.</p>
@@ -179,7 +179,7 @@ export default function Login() {
         </div>
 
         <p className="mt-6 text-center text-[11px] font-medium tracking-wide text-white/35 lg:hidden">
-          © {new Date().getFullYear()} APIIT · School of Computing
+          © {new Date().getFullYear()} APIIT
         </p>
       </div>
     </div>

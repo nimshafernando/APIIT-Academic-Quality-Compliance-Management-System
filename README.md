@@ -4,7 +4,7 @@
 
 # AQCMS — Academic Quality & Compliance Management System
 
-**A full-stack quality-assurance platform for the APIIT School of Computing** — replacing the shared-drive folder maze with role-based dashboards, digitised subject files, automated approval chains, deadline tracking, and a tamper-evident audit trail, aligned with the APIITEMS Procedure Manual (ISO 21001:2018).
+**A full-stack quality-assurance platform for APIIT** — replacing the shared-drive folder maze with role-based dashboards, digitised subject files, automated approval chains, deadline tracking, and a tamper-evident audit trail, aligned with the APIITEMS Procedure Manual (ISO 21001:2018).
 
 [![Live Demo](https://img.shields.io/badge/Live_Demo-aqcms--soc.appwrite.network-19B9AF?style=for-the-badge)](https://aqcms-soc.appwrite.network)
 
@@ -159,5 +159,5 @@ The test suites run against the **live** backend using real user sessions per ro
 ---
 
 <div align="center">
-<sub>Built for the APIIT School of Computing · APIITEMS Procedure Manual (ISO 21001:2018)</sub>
+<sub>Built for APIIT · APIITEMS Procedure Manual (ISO 21001:2018)</sub>
 </div>

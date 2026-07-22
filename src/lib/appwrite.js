@@ -76,17 +76,19 @@ export function fmtDateTime(iso) {
 
 // ---- Notifications ---------------------------------------------------------
 
-export async function notify(recipientUserId, type, message, relatedId = '') {
+export async function notify(recipientUserId, type, message, relatedId = '', fromName = '') {
   try {
     // Created with NO permissions (clients cannot grant other users access);
     // the deadline-engine function stamps the recipient's permissions on the
     // create event, which also delivers it over Realtime and email.
+    // fromName = who triggered it; the email is signed "Kind regards, <fromName>".
     await databases.createDocument(DB_ID, COL.NOTIFICATIONS, ID.unique(), {
       userId: recipientUserId,
       type,
       message,
       relatedId,
       read: false,
+      fromName,
     })
   } catch (err) {
     // Notifications are best-effort; never block the main action on them.
@@ -95,14 +97,14 @@ export async function notify(recipientUserId, type, message, relatedId = '') {
 }
 
 // Notify every user currently holding a role (e.g. next approvers).
-export async function notifyRole(role, type, message, relatedId = '') {
+export async function notifyRole(role, type, message, relatedId = '', fromName = '') {
   try {
     const profiles = await listAll(COL.PROFILES, [
       Query.contains('roles', role),
       Query.equal('status', 'active'),
     ])
     const userIds = [...new Set(profiles.map((p) => p.userId))]
-    await Promise.all(userIds.map((uid) => notify(uid, type, message, relatedId)))
+    await Promise.all(userIds.map((uid) => notify(uid, type, message, relatedId, fromName)))
   } catch (err) {
     console.warn('notifyRole failed', err)
   }

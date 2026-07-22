@@ -1,8 +1,27 @@
+import { createHmac, timingSafeEqual } from 'node:crypto'
 import { Client, Databases, ID, Query, Permission, Role } from 'node-appwrite'
 
 const DB = 'aqcms'
 const SITE_URL = process.env.SITE_URL || 'https://aqcms-soc.appwrite.network'
 const LOGO_URL = `${SITE_URL}/apiitlogo.png`
+// Public domain of THIS function — approve/decline links in emails point here.
+const ACTIONS_URL = process.env.ACTIONS_URL || 'https://aqcms-actions.appwrite.network'
+
+/* -------------------------------------------- signed email action links ---- */
+
+function signAction(instanceId, stageIndex, userId, action) {
+  return createHmac('sha256', process.env.EMAIL_ACTION_SECRET)
+    .update(`${instanceId}|${stageIndex}|${userId}|${action}`)
+    .digest('hex')
+}
+
+function verifyAction(token, instanceId, stageIndex, userId, action) {
+  if (!process.env.EMAIL_ACTION_SECRET || !token) return false
+  const expected = signAction(instanceId, stageIndex, userId, action)
+  const a = Buffer.from(String(token))
+  const b = Buffer.from(expected)
+  return a.length === b.length && timingSafeEqual(a, b)
+}
 
 // One function, two jobs (free plan allows only 2 functions total):
 //  1. EVENT trigger (notifications.*.create) → send a branded email for every
@@ -35,63 +54,106 @@ const ACCENTS = {
   stage_approved: '#059669',
 }
 
-function template({ title, message, recipientName, intendedFor, accent = '#19B9AF', link }) {
+function template({ title, message, recipientName, intendedFor, accent = '#19B9AF', link, fromName, actions }) {
+  // Signed by whoever triggered the notification; system mail (reminders,
+  // escalations) falls back to a neutral AQCMS signature.
+  const signName = fromName?.replace(/\(.*?\)/g, '').trim() || 'AQCMS Notifications'
+  const signSub = fromName ? 'via AQCMS · Academic Quality & Compliance, APIIT' : 'Academic Quality & Compliance, APIIT'
+  const initial = (signName[0] || 'A').toUpperCase()
+  // Soft tint behind the eyebrow chip — explicit per accent (8-digit hex
+  // alpha isn't safe in all email clients).
+  const accentTint = { '#DC2626': '#FDECEC', '#D97706': '#FCF1E0', '#059669': '#E8F8F2' }[accent] || '#E4F7F5'
+  const buttons = actions
+    ? `<table role="presentation" cellpadding="0" cellspacing="0"><tr>
+            <td style="border-radius:999px;background:linear-gradient(135deg,#12BC8E,#059669);background-color:#059669;box-shadow:0 8px 20px rgba(5,150,105,0.25);">
+              <a href="${actions.approveUrl}" style="display:inline-block;padding:14px 36px;border-radius:999px;color:#ffffff;font-size:14px;font-weight:700;letter-spacing:0.3px;text-decoration:none;">Approve</a>
+            </td>
+            <td style="width:14px;font-size:0;">&nbsp;</td>
+            <td style="border-radius:999px;background-color:#FDEDED;">
+              <a href="${actions.declineUrl}" style="display:inline-block;padding:14px 36px;border-radius:999px;color:#B42318;font-size:14px;font-weight:700;letter-spacing:0.3px;text-decoration:none;">Decline</a>
+            </td>
+          </tr></table>
+          <p style="margin:20px 0 0;font-size:13px;"><a href="${link}" style="color:#0FA093;font-weight:600;text-decoration:none;">Review the full submission in AQCMS &#8594;</a></p>
+          <p style="margin:14px 0 0;color:#A8B3B2;font-size:11.5px;line-height:1.7;">Declining returns the submission to its author for revision.<br/>These links are personal to you &mdash; please don&rsquo;t forward this email.</p>`
+    : `<table role="presentation" cellpadding="0" cellspacing="0"><tr>
+            <td style="border-radius:999px;background:linear-gradient(135deg,#1FCABF,#0FA093);background-color:#19B9AF;box-shadow:0 8px 20px rgba(15,160,147,0.25);">
+              <a href="${link}" style="display:inline-block;padding:14px 36px;border-radius:999px;color:#ffffff;font-size:14px;font-weight:700;letter-spacing:0.3px;text-decoration:none;">Open AQCMS</a>
+            </td>
+          </tr></table>`
   return `<!doctype html>
 <html>
-<body style="margin:0;padding:0;background-color:#F5F7F7;font-family:'Segoe UI',Helvetica,Arial,sans-serif;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#F5F7F7;padding:32px 16px;">
+<body style="margin:0;padding:0;background-color:#EDF2F1;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#EDF2F1;padding:40px 16px 48px;">
     <tr><td align="center">
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(12,29,27,0.10);">
+
+      <!-- Card -->
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:24px;overflow:hidden;box-shadow:0 2px 4px rgba(12,29,27,0.04),0 16px 48px rgba(12,29,27,0.10);">
 
         <!-- Header: APIIT logo on a white tile over the dark teal brand panel -->
-        <tr><td style="background:linear-gradient(135deg,#0C1D1B 0%,#12302D 60%,#14443F 100%);background-color:#0C1D1B;padding:28px 32px;">
-          <table role="presentation" cellpadding="0" cellspacing="0"><tr>
-            <td style="background:#ffffff;border-radius:12px;padding:8px 12px;">
-              <img src="${LOGO_URL}" alt="APIIT" height="30" style="display:block;height:30px;" />
+        <tr><td style="background:linear-gradient(120deg,#0B1B19 0%,#123230 55%,#155A50 130%);background-color:#0C1D1B;padding:34px 40px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+            <td style="width:1%;background:#ffffff;border-radius:14px;padding:9px 13px;">
+              <img src="${LOGO_URL}" alt="APIIT" height="28" style="display:block;height:28px;" />
             </td>
-            <td style="padding-left:14px;">
-              <p style="margin:0;color:#ffffff;font-size:16px;font-weight:800;letter-spacing:0.5px;">AQCMS</p>
-              <p style="margin:2px 0 0;color:rgba(255,255,255,0.55);font-size:11px;">School of Computing</p>
+            <td style="padding-left:16px;">
+              <p style="margin:0;color:#ffffff;font-size:17px;font-weight:800;letter-spacing:2px;">AQCMS</p>
+              <p style="margin:3px 0 0;color:#7FBDB4;font-size:11px;font-weight:600;letter-spacing:0.8px;">SCHOOL OF COMPUTING</p>
+            </td>
+            <td align="right" style="vertical-align:top;">
+              <p style="margin:0;color:rgba(255,255,255,0.35);font-size:10.5px;letter-spacing:1.2px;">APIIT</p>
             </td>
           </tr></table>
         </td></tr>
 
-        <!-- Accent bar -->
-        <tr><td style="height:4px;background-color:${accent};font-size:0;line-height:0;">&nbsp;</td></tr>
-
         <!-- Body -->
-        <tr><td style="padding:32px;">
-          <p style="margin:0 0 6px;color:#9CA3AF;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;">Academic Quality &amp; Compliance</p>
-          <h1 style="margin:0 0 16px;color:#111827;font-size:21px;font-weight:800;line-height:1.3;">${title}</h1>
-          <p style="margin:0 0 8px;color:#4B5563;font-size:14px;">Hi ${recipientName || 'there'},</p>
-          <div style="margin:16px 0 24px;padding:16px 18px;background-color:#F5F7F7;border-left:4px solid ${accent};border-radius:0 10px 10px 0;">
-            <p style="margin:0;color:#374151;font-size:14px;line-height:1.6;">${message}</p>
-          </div>
+        <tr><td style="padding:40px 40px 36px;">
           <table role="presentation" cellpadding="0" cellspacing="0"><tr>
-            <td style="border-radius:10px;background:linear-gradient(135deg,#1FCABF,#19B9AF,#0FA093);background-color:#19B9AF;">
-              <a href="${link}" style="display:inline-block;padding:12px 28px;color:#ffffff;font-size:14px;font-weight:700;text-decoration:none;">Open AQCMS</a>
+            <td style="border-radius:999px;background-color:${accentTint};padding:6px 14px;">
+              <p style="margin:0;color:${accent};font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:1.6px;">Academic Quality &amp; Compliance</p>
+            </td>
+          </tr></table>
+          <h1 style="margin:20px 0 0;color:#0E1B1A;font-size:24px;font-weight:800;line-height:1.25;letter-spacing:-0.3px;">${title}</h1>
+          <p style="margin:14px 0 0;color:#5B6B69;font-size:14.5px;line-height:1.7;">Hi ${recipientName || 'there'},</p>
+
+          <!-- Message panel -->
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:20px 0 28px;"><tr>
+            <td style="width:3px;border-radius:3px;background-color:${accent};font-size:0;">&nbsp;</td>
+            <td style="padding:18px 22px;background-color:#F6FAF9;border-radius:0 16px 16px 0;">
+              <p style="margin:0;color:#33413F;font-size:14.5px;line-height:1.75;">${message}</p>
             </td>
           </tr></table>
 
+          ${buttons}
+
           <!-- Signature -->
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:28px;border-top:1px solid #EEF1F1;">
-            <tr><td style="padding-top:18px;">
-              <p style="margin:0;color:#374151;font-size:13px;line-height:1.6;">Kind regards,</p>
-              <p style="margin:6px 0 0;color:#111827;font-size:14px;font-weight:700;">Dr. Chaman Wijesiriwardana</p>
-              <p style="margin:1px 0 0;color:#6B7280;font-size:12px;">Head of Computing · School of Computing, APIIT</p>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:36px;border-top:1px solid #ECF1F0;">
+            <tr><td style="padding-top:24px;">
+              <p style="margin:0 0 14px;color:#5B6B69;font-size:13.5px;">Kind regards,</p>
+              <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+                <td style="width:42px;height:42px;border-radius:999px;background:linear-gradient(135deg,#DDF5F1,#BCEAE3);background-color:#DDF5F1;text-align:center;vertical-align:middle;">
+                  <p style="margin:0;color:#0E8A7D;font-size:16px;font-weight:800;line-height:42px;">${initial}</p>
+                </td>
+                <td style="padding-left:13px;">
+                  <p style="margin:0;color:#0E1B1A;font-size:14.5px;font-weight:700;">${signName}</p>
+                  <p style="margin:2px 0 0;color:#8CA09D;font-size:12px;">${signSub}</p>
+                </td>
+              </tr></table>
             </td></tr>
           </table>
-          ${intendedFor ? `<p style="margin:24px 0 0;padding:10px 14px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:10px;color:#9A3412;font-size:12px;"><strong>Demo redirect:</strong> this email was intended for <strong>${intendedFor}</strong> and was delivered to you because the Resend sandbox only sends to the account owner.</p>` : ''}
+          ${intendedFor ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:28px;"><tr><td style="padding:13px 18px;background-color:#FFF9F0;border:1px solid #F5E3C3;border-radius:14px;"><p style="margin:0;color:#8A6116;font-size:12px;line-height:1.6;"><strong>Demo redirect</strong> &mdash; this email was intended for <strong>${intendedFor}</strong> and reached you because the sending domain is still in sandbox mode.</p></td></tr></table>` : ''}
         </td></tr>
 
         <!-- Footer -->
-        <tr><td style="padding:20px 32px;background-color:#FAFBFB;border-top:1px solid #EEF1F1;">
-          <p style="margin:0;color:#9CA3AF;font-size:11px;line-height:1.6;">
-            APIIT — Inspire love for learning · Academic Quality &amp; Compliance Management System<br/>
-            You received this because notifications are enabled for your AQCMS account.
+        <tr><td style="padding:24px 40px;background-color:#FAFCFB;border-top:1px solid #ECF1F0;" align="center">
+          <p style="margin:0;color:#9FAFAC;font-size:11px;line-height:1.8;letter-spacing:0.2px;">
+            APIIT &middot; Inspire love for learning<br/>
+            Academic Quality &amp; Compliance Management System<br/>
+            <span style="color:#BCC8C6;">You received this because notifications are enabled for your AQCMS account.</span>
           </p>
         </td></tr>
       </table>
+
+      <p style="margin:22px 0 0;color:#AEBDBA;font-size:11px;letter-spacing:0.4px;">&copy; APIIT &middot; Colombo</p>
     </td></tr>
   </table>
 </body>
@@ -111,6 +173,24 @@ async function sendNotificationEmail(db, doc, log, error) {
   const subject = `${SUBJECTS[doc.type] || 'New notification'} — AQCMS`
   const link = doc.relatedId ? `${SITE_URL}/workflows/${doc.relatedId}` : `${SITE_URL}/notifications`
 
+  // Approval requests get one-click Approve/Decline buttons: signed links to
+  // this function's public domain, bound to instance+stage+recipient so they
+  // can't be reused for anything else.
+  let actions = null
+  if (doc.type === 'approval_pending' && doc.relatedId && process.env.EMAIL_ACTION_SECRET) {
+    try {
+      const inst = await db.getDocument(DB, 'workflow_instances', doc.relatedId)
+      if (inst.status === 'in_progress') {
+        const mk = (action) =>
+          `${ACTIONS_URL}/?action=${action}&instance=${inst.$id}&stage=${inst.currentStageIndex}` +
+          `&user=${doc.userId}&token=${signAction(inst.$id, inst.currentStageIndex, doc.userId, action)}`
+        actions = { approveUrl: mk('approve'), declineUrl: mk('decline') }
+      }
+    } catch {
+      /* relatedId isn't a workflow instance (e.g. a task) — no buttons */
+    }
+  }
+
   const html = template({
     title: SUBJECTS[doc.type] || 'You have a new notification',
     message: doc.message,
@@ -118,6 +198,8 @@ async function sendNotificationEmail(db, doc, log, error) {
     intendedFor: redirect && redirect !== profile.email ? `${profile.name} <${profile.email}>` : '',
     accent: ACCENTS[doc.type] || '#19B9AF',
     link,
+    fromName: doc.fromName || '',
+    actions,
   })
 
   const resp = await fetch('https://api.resend.com/emails', {
@@ -134,6 +216,119 @@ async function sendNotificationEmail(db, doc, log, error) {
   return { emailId: result.id, to }
 }
 
+/* -------------------------------------- email approve/decline endpoint ---- */
+
+// Minimal branded result page shown in the browser after clicking a button.
+function actionPage(ok, title, detail, link) {
+  const tone = ok ? { bg: '#E8F8F2', fg: '#067A57', label: 'Action completed' } : { bg: '#FDEDED', fg: '#B42318', label: 'Nothing was changed' }
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title} — AQCMS</title></head>
+<body style="margin:0;background:linear-gradient(160deg,#EDF2F1,#E2ECEA);background-color:#EDF2F1;min-height:100vh;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <div style="max-width:460px;margin:0 auto;padding:9vh 20px 40px;">
+    <div style="background:#fff;border-radius:24px;padding:44px 40px;box-shadow:0 2px 4px rgba(12,29,27,.04),0 16px 48px rgba(12,29,27,.10);text-align:center;">
+      <p style="display:inline-block;margin:0 0 20px;padding:7px 16px;border-radius:999px;background:${tone.bg};color:${tone.fg};font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.4px;">${tone.label}</p>
+      <h1 style="margin:0 0 12px;font-size:22px;font-weight:800;color:#0E1B1A;letter-spacing:-0.3px;">${title}</h1>
+      <p style="margin:0 0 30px;font-size:14.5px;color:#5B6B69;line-height:1.7;">${detail}</p>
+      <a href="${link}" style="display:inline-block;padding:14px 36px;border-radius:999px;background:linear-gradient(135deg,#1FCABF,#0FA093);background-color:#19B9AF;color:#fff;font-weight:700;font-size:14px;letter-spacing:0.3px;text-decoration:none;box-shadow:0 8px 20px rgba(15,160,147,.25);">Open AQCMS</a>
+    </div>
+    <p style="margin:22px 0 0;text-align:center;font-size:11px;color:#AEBDBA;letter-spacing:0.4px;">AQCMS &middot; Academic Quality &amp; Compliance, APIIT</p>
+  </div>
+</body></html>`
+}
+
+// GET ?action=approve|decline&instance=..&stage=..&user=..&token=.. — the
+// token (HMAC over all four values) proves the link came from an email WE
+// sent to THAT approver for THAT stage; mirrors approveStage/returnForRevision
+// in src/lib/workflow.js.
+async function handleEmailAction(db, req, res, log, error) {
+  const page = (ok, title, detail, link) =>
+    res.send(actionPage(ok, title, detail, link), ok ? 200 : 400, { 'content-type': 'text/html; charset=utf-8' })
+  try {
+    const { action, instance: instanceId, stage, user: userId, token } = req.query || {}
+    if (!['approve', 'decline'].includes(action) || !instanceId || stage === undefined || !userId)
+      return page(false, 'Invalid link', 'This action link is malformed.', SITE_URL)
+    if (!verifyAction(token, instanceId, stage, userId, action))
+      return page(false, 'Link not valid', 'This action link is invalid or has expired.', SITE_URL)
+
+    let inst
+    try {
+      inst = await db.getDocument(DB, 'workflow_instances', instanceId)
+    } catch {
+      return page(false, 'Not found', 'This submission no longer exists.', SITE_URL)
+    }
+
+    const stageIdx = Number(stage)
+    const viewLink = `${SITE_URL}/workflows/${instanceId}`
+    if (inst.status !== 'in_progress' || inst.currentStageIndex !== stageIdx)
+      return page(false, 'Already actioned', `"${inst.title}" has moved on since this email was sent — nothing was changed. It is currently: ${inst.status === 'approved' ? 'fully approved' : inst.currentStageLabel || inst.status}.`, viewLink)
+
+    const prof = await db.listDocuments(DB, 'profiles', [Query.equal('userId', userId), Query.limit(1)])
+    const actor = prof.documents[0]
+    const actorName = actor?.name || 'Approver'
+    const stages = JSON.parse(inst.stagesJson || '[]')
+    const label = stages[stageIdx]?.label || `Stage ${stageIdx + 1}`
+
+    // Still the right person? Assigned approver wins; unassigned stages need
+    // the stage role on the actor's profile.
+    const assigned = (inst.approverIds?.[stageIdx] || '').split(',').filter(Boolean)
+    const allowed = assigned.length ? assigned.includes(userId) : (actor?.roles || []).includes(stages[stageIdx]?.role)
+    if (!allowed) return page(false, 'Not authorised', 'You are no longer an approver for this stage.', viewLink)
+
+    const notifyUser = (uid, type, message, fromName) =>
+      db.createDocument(
+        DB,
+        'notifications',
+        ID.unique(),
+        { userId: uid, type, message, relatedId: instanceId, read: false, fromName },
+        [Permission.read(Role.user(uid)), Permission.update(Role.user(uid)), Permission.delete(Role.user(uid))],
+      )
+    const logAct = (act, comment) =>
+      db.createDocument(DB, 'workflow_actions', ID.unique(), {
+        instanceId, userId, userName: actorName, action: act, stageIndex: stageIdx, stageLabel: label, comment,
+      })
+
+    if (action === 'decline') {
+      await db.updateDocument(DB, 'workflow_instances', instanceId, { status: 'returned' })
+      await logAct('return', 'Declined via email — contact the approver for details.')
+      await notifyUser(inst.submittedBy, 'returned', `"${inst.title}" was returned for revision by ${actorName} (declined via email).`, actorName)
+      log(`email action: ${actorName} declined ${instanceId} @ stage ${stageIdx}`)
+      return page(true, 'Submission declined', `"${inst.title}" has been returned to ${inst.submittedByName || 'the submitter'} for revision. They have been notified.`, viewLink)
+    }
+
+    const nextIdx = stageIdx + 1
+    const isFinal = nextIdx >= stages.length
+    await db.updateDocument(DB, 'workflow_instances', instanceId, {
+      status: isFinal ? 'approved' : 'in_progress',
+      currentStageIndex: isFinal ? stageIdx : nextIdx,
+      currentStageRole: isFinal ? '' : stages[nextIdx].role,
+      currentStageLabel: isFinal ? 'Completed' : stages[nextIdx].label || stages[nextIdx].role,
+    })
+    await logAct('approve', 'Approved via email')
+
+    if (isFinal) {
+      await notifyUser(inst.submittedBy, 'approved', `"${inst.title}" has received final sign-off. The record is now locked.`, actorName)
+    } else {
+      let recipients = (inst.approverIds?.[nextIdx] || '').split(',').filter(Boolean)
+      if (!recipients.length) {
+        const holders = await db.listDocuments(DB, 'profiles', [Query.contains('roles', stages[nextIdx].role), Query.equal('status', 'active'), Query.limit(100)])
+        recipients = [...new Set(holders.documents.map((p) => p.userId))]
+      }
+      const nextLabel = stages[nextIdx].label || stages[nextIdx].role
+      for (const uid of recipients) await notifyUser(uid, 'approval_pending', `"${inst.title}" (${inst.moduleCode}) is awaiting your ${nextLabel}.`, actorName)
+      await notifyUser(inst.submittedBy, 'stage_approved', `"${inst.title}" passed ${label} and moved to ${nextLabel}.`, actorName)
+    }
+    log(`email action: ${actorName} approved ${instanceId} @ stage ${stageIdx}`)
+    return page(
+      true,
+      isFinal ? 'Final sign-off recorded' : 'Stage approved',
+      isFinal ? `"${inst.title}" is now fully approved and locked.` : `"${inst.title}" has moved on to ${stages[nextIdx].label || 'the next stage'}. Everyone involved has been notified.`,
+      viewLink,
+    )
+  } catch (err) {
+    error(String(err))
+    return page(false, 'Something went wrong', err?.message || 'The action could not be completed. Please use AQCMS directly.', SITE_URL)
+  }
+}
+
 /* --------------------------------------------------------------- main ----- */
 
 export default async ({ req, res, log, error }) => {
@@ -142,6 +337,21 @@ export default async ({ req, res, log, error }) => {
     .setProject(process.env.APPWRITE_FUNCTION_PROJECT_ID)
     .setKey(req.headers['x-appwrite-key'] ?? process.env.APPWRITE_API_KEY)
   const db = new Databases(client)
+
+  /* ---- Mode 0: HTTP — signed approve/decline links from emails ----
+     The function domain is public (execute: any); the HMAC token is the
+     authorisation. Anonymous hits WITHOUT an action must never fall through
+     to cron mode — only the scheduler or an authenticated execution runs it. */
+  if (req.headers['x-appwrite-trigger'] === 'http') {
+    if (req.query?.action) return handleEmailAction(db, req, res, log, error)
+    if (!req.headers['x-appwrite-user-id']) {
+      return res.send(
+        actionPage(false, 'Nothing here', 'This endpoint only handles signed action links from AQCMS emails.', SITE_URL),
+        404,
+        { 'content-type': 'text/html; charset=utf-8' },
+      )
+    }
+  }
 
   /* ---- Mode 1: document events ----
      Browser clients can only grant document permissions to their OWN identity,

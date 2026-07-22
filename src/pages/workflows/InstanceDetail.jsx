@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { databases, DB_ID, COL, listAll, Query, fmtDateTime } from '../../lib/appwrite'
-import { parseStages, approveStage, returnForRevision, resubmitWorkflow, fileDownloadUrl, fileViewUrl } from '../../lib/workflow'
+import { parseStages, approveStage, returnForRevision, resubmitWorkflow, canApproveStage, downloadFile, viewFile } from '../../lib/workflow'
 import { ROLES, ROLE_LABELS } from '../../lib/roles'
 import { useAuth } from '../../context/AuthContext'
 import { PageHeader, Spinner, StatusBadge, ErrorBanner, Modal, Avatar } from '../../components/UI'
@@ -51,9 +51,12 @@ function StageTimeline({ instance }) {
                   : returned
                     ? 'Returned to submitter'
                     : isCurrent
-                      ? `Waiting on ${ROLE_LABELS[s.role]}`
+                      ? `Waiting on ${instance.approverNames?.[i] || ROLE_LABELS[s.role]}`
                       : 'Pending'}
               </p>
+              {instance.approverNames?.[i] && !done && !isCurrent && (
+                <p className="text-xs text-gray-300">{instance.approverNames[i]}</p>
+              )}
             </div>
           </li>
         )
@@ -96,7 +99,9 @@ export default function InstanceDetail() {
   if (loading) return <Spinner />
   if (!instance) return <ErrorBanner error={error || 'Submission not found.'} />
 
-  const canActOnStage = instance.status === 'in_progress' && roles.includes(instance.currentStageRole)
+  // Role membership alone is not enough: when the stage resolved to a specific
+  // person (e.g. THIS module's Module Leader), only they may act on it.
+  const canActOnStage = canApproveStage(instance, user, roles)
   const isSubmitter = instance.submittedBy === user.$id
   const canResubmit = instance.status === 'returned' && isSubmitter
 
@@ -272,12 +277,12 @@ export default function InstanceDetail() {
                       <span className="truncate font-medium">{instance.fileNames?.[i] || `File ${i + 1}`}</span>
                     </span>
                     <span className="flex flex-shrink-0 gap-2">
-                      <a href={fileViewUrl(fid)} target="_blank" rel="noreferrer" className="btn-secondary !px-3 !py-1.5 text-xs">
+                      <button onClick={() => viewFile(fid)} className="btn-secondary !px-3 !py-1.5 text-xs">
                         <Icon name="eye" className="h-3.5 w-3.5" /> View
-                      </a>
-                      <a href={fileDownloadUrl(fid)} className="btn-secondary !px-3 !py-1.5 text-xs">
+                      </button>
+                      <button onClick={() => downloadFile(fid, instance.fileNames?.[i])} className="btn-secondary !px-3 !py-1.5 text-xs">
                         <Icon name="download" className="h-3.5 w-3.5" /> Download
-                      </a>
+                      </button>
                     </span>
                   </li>
                 ))}

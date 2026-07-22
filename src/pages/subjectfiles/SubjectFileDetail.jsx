@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { databases, storage, DB_ID, COL, BUCKET_ID, ID, Permission, Role, listAll, Query, fmtDateTime } from '../../lib/appwrite'
-import { fileViewUrl, fileDownloadUrl } from '../../lib/workflow'
-import { ROLES } from '../../lib/roles'
+import { viewFile, downloadFile } from '../../lib/workflow'
+import { ROLES, SCOPE_TYPES } from '../../lib/roles'
 import { useAuth } from '../../context/AuthContext'
 import { PageHeader, Spinner, EmptyState, ErrorBanner, StatusBadge, Modal, ProgressBar } from '../../components/UI'
 import Icon from '../../components/Icons'
@@ -35,8 +35,9 @@ function filePermissions(restricted, uploaderId) {
 
 export default function SubjectFileDetail() {
   const { subjectId } = useParams()
-  const { user, hasRole } = useAuth()
+  const { user, hasRole, assignments } = useAuth()
   const [subject, setSubject] = useState(null)
+  const [offerings, setOfferings] = useState([]) // staffing for this subject's module
   const [slots, setSlots] = useState([])
   const [error, setError] = useState('')
   const [busySlot, setBusySlot] = useState('')
@@ -46,10 +47,6 @@ export default function SubjectFileDetail() {
   const [addModal, setAddModal] = useState(false)
   const [newSlot, setNewSlot] = useState({ name: '', category: 'Assessment', restricted: false })
 
-  const canUpload = hasRole(...UPLOAD_ROLES)
-  const canReview = hasRole(...REVIEW_ROLES)
-  const canManage = hasRole(...MANAGE_ROLES)
-
   const load = useCallback(async () => {
     try {
       const [sub, list] = await Promise.all([
@@ -58,6 +55,7 @@ export default function SubjectFileDetail() {
       ])
       setSubject(sub)
       setSlots(list.sort((a, b) => a.$createdAt.localeCompare(b.$createdAt)))
+      if (sub.moduleId) setOfferings(await listAll(COL.MODULE_OFFERINGS, [Query.equal('moduleId', sub.moduleId)]))
     } catch (err) {
       setError(err?.message || 'Failed to load subject file.')
     }
@@ -69,6 +67,23 @@ export default function SubjectFileDetail() {
 
   if (!subject && !error) return <Spinner />
   if (!subject) return <ErrorBanner error={error} />
+
+  // Per-module staffing: actions on this subject file belong to THIS module's
+  // team (from its offerings + scoped role assignments), not every holder of
+  // the role. HOD/Super Admin keep oversight; modules without any offering on
+  // record fall back to the legacy role-wide behaviour so nobody is locked out.
+  const staffed = offerings.length > 0
+  const isModuleLeader = offerings.some((o) => o.moduleLeaderId === user.$id)
+  const isModuleLecturer = offerings.some((o) => (o.lecturerIds || []).includes(user.$id))
+  const isModuleIV =
+    offerings.some((o) => o.internalVerifierId === user.$id) ||
+    assignments.some((a) => a.role === ROLES.INTERNAL_VERIFIER && a.scopeType === SCOPE_TYPES.MODULE && a.scopeId === subject.moduleId)
+  const isLevelCoordHere = assignments.some(
+    (a) => a.role === ROLES.LEVEL_COORDINATOR && a.scopeType === SCOPE_TYPES.LEVEL && subject.levelId && a.scopeId === subject.levelId,
+  )
+  const canUpload = hasRole(ROLES.SUPER_ADMIN) || (staffed ? isModuleLeader || isModuleLecturer : hasRole(...UPLOAD_ROLES))
+  const canReview = hasRole(ROLES.HOD, ROLES.SUPER_ADMIN) || (staffed ? isModuleLeader || isModuleIV || isLevelCoordHere : hasRole(...REVIEW_ROLES))
+  const canManage = hasRole(ROLES.SUPER_ADMIN, ROLES.ACADEMIC_ADMIN) || (staffed ? isModuleLeader : hasRole(...MANAGE_ROLES))
 
   const slotBase = {
     subjectId: subject.$id,
@@ -240,12 +255,12 @@ export default function SubjectFileDetail() {
               <div className="mt-4 flex flex-wrap items-center gap-2">
                 {slot.currentFileId && (
                   <>
-                    <a href={fileViewUrl(slot.currentFileId)} target="_blank" rel="noreferrer" className="btn-secondary !px-3 !py-1.5 text-xs">
+                    <button onClick={() => viewFile(slot.currentFileId)} className="btn-secondary !px-3 !py-1.5 text-xs">
                       <Icon name="eye" className="h-3.5 w-3.5" /> View
-                    </a>
-                    <a href={fileDownloadUrl(slot.currentFileId)} className="btn-secondary !px-3 !py-1.5 text-xs">
+                    </button>
+                    <button onClick={() => downloadFile(slot.currentFileId, slot.currentFileName)} className="btn-secondary !px-3 !py-1.5 text-xs">
                       <Icon name="download" className="h-3.5 w-3.5" /> Download
-                    </a>
+                    </button>
                   </>
                 )}
                 {slot.version > 0 && (
@@ -296,9 +311,9 @@ export default function SubjectFileDetail() {
                   <p className="truncate text-sm font-bold text-gray-800">v{v.version} — {v.fileName}</p>
                   <p className="text-xs text-gray-400">{v.uploadedByName?.replace(/\(.*?\)/g, '').trim()} · {fmtDateTime(v.$createdAt)}{v.note && ` · ${v.note}`}</p>
                 </div>
-                <a href={fileDownloadUrl(v.fileId)} className="btn-secondary flex-shrink-0 !px-3 !py-1.5 text-xs">
+                <button onClick={() => downloadFile(v.fileId, v.fileName)} className="btn-secondary flex-shrink-0 !px-3 !py-1.5 text-xs">
                   <Icon name="download" className="h-3.5 w-3.5" />
-                </a>
+                </button>
               </li>
             ))}
           </ul>

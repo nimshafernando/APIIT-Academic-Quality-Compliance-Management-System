@@ -60,7 +60,7 @@ export default function Cases() {
         // (clients cannot grant permissions to roles other than their own).
         [Permission.read(Role.user(user.$id)), Permission.update(Role.user(user.$id))],
       )
-      await notifyRole(ROLES.HOD, 'case', `New ${TYPES[tab].label} case logged by ${user.name}: "${form.title}".`, doc.$id)
+      await notifyRole(ROLES.HOD, 'case', `New ${TYPES[tab].label} case logged by ${user.name}: "${form.title}".`, doc.$id, user.name)
       setModal(false)
       setForm({ studentRef: '', title: '', details: '', moduleCode: '', semesterName: '' })
       await load()

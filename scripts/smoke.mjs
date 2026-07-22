@@ -119,11 +119,19 @@ console.log('\n4) Moderator / HOD / Level Coordinator queues')
   const hod = await loginAs('hod@apiit.lk')
   const q2 = await hod.db.listDocuments(DB, 'workflow_instances', [Query.equal('status', 'in_progress'), Query.equal('currentStageRole', 'hod'), Query.limit(100)])
   ok('HOD queue has the final sign-off item', q2.documents.some((d) => d.$id === 'wf-prog-marking'))
+  // Live usage adds instances beyond the seeded 7 — assert the seeded ones
+  // are all visible school-wide rather than an exact count.
   const all = await hod.db.listDocuments(DB, 'workflow_instances', [Query.limit(100)])
-  ok('HOD sees all 7 instances school-wide', all.total === 7, `got ${all.total}`)
+  const seeded = ['wf-cloud-brief', 'wf-cloud-exam', 'wf-ux-resit', 'wf-web-lss', 'wf-prog-marking', 'wf-cloud-moderation', 'wf-cloud-descriptor']
+  const visible = new Set(all.documents.map((d) => d.$id))
+  ok('HOD sees all seeded instances school-wide', seeded.every((id) => visible.has(id)), `got ${all.total}`)
   const lc = await loginAs('levelcoord@apiit.lk')
   const q3 = await lc.db.listDocuments(DB, 'workflow_instances', [Query.equal('status', 'in_progress'), Query.equal('currentStageRole', 'levelcoord'), Query.limit(100)])
   ok('Level Coordinator queue has the re-sit pack', q3.documents.some((d) => d.$id === 'wf-ux-resit'))
+  // Per-module routing: instances snapshot WHO approves each stage (the
+  // module's own ML/IV/LC), so only that person may act — not every role holder.
+  const routed = await hod.db.getDocument(DB, 'workflow_instances', 'wf-cloud-exam')
+  ok('instance carries resolved per-stage approvers', routed.approverIds?.[0] === 'demo-verifier' && routed.approverIds?.[1] === 'demo-moduleleader')
 }
 
 console.log('\n5) Academic Admin structure permissions')

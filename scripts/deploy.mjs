@@ -34,7 +34,7 @@ try {
 } catch {
   site = await api('POST', '/sites', {
     siteId: SITE_ID,
-    name: 'AQCMS — School of Computing',
+    name: 'AQCMS — Academic Quality & Compliance',
     framework: 'other',
     adapter: 'static',
     fallbackFile: 'index.html',

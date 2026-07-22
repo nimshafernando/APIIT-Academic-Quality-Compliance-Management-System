@@ -17,13 +17,14 @@ await db.createDocument(
   'notifications',
   ID.unique(),
   {
-    userId: 'demo-lecturer',
+    userId: 'demo-verifier', // the assigned IV for wf-cloud-brief — so the Approve/Decline buttons in the email are genuinely actionable
     type: 'approval_pending',
     message: 'TEST EMAIL — "In-course Assessment Brief v1" (COM2521) is awaiting your Internal Verification. This message confirms that AQCMS email notifications are configured correctly.',
     relatedId: 'wf-cloud-brief',
     read: false,
+    fromName: 'Tharindu Weerasinghe (Lecturer)',
   },
-  [Permission.read(Role.user('demo-lecturer')), Permission.update(Role.user('demo-lecturer')), Permission.delete(Role.user('demo-lecturer'))],
+  [Permission.read(Role.user('demo-verifier')), Permission.update(Role.user('demo-verifier')), Permission.delete(Role.user('demo-verifier'))],
 )
 
 console.log('Waiting for the event-triggered execution…')

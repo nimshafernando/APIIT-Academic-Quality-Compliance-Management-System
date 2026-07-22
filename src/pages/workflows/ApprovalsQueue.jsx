@@ -5,7 +5,10 @@ import { useAuth } from '../../context/AuthContext'
 import { PageHeader, Spinner, EmptyState, ErrorBanner } from '../../components/UI'
 import InstanceTable from './InstanceTable'
 
-// Items waiting on one of MY approver roles, filtered to my assignment scope:
+// Items waiting on one of MY approver roles, filtered to my assignment scope.
+// Instances submitted since per-module routing carry a resolved approver
+// snapshot (approverIds per stage) — those are matched on identity. Older
+// instances fall back to the role+scope heuristics:
 //  - HOD sees everything at an HOD stage
 //  - Module Leader: instances for modules on offerings they lead
 //  - Level Coordinator: instances within their assigned level(s)
@@ -36,6 +39,9 @@ export async function loadApprovalsQueue(user, roles, assignments) {
   return results.filter((inst) => {
     const stageRole = inst.currentStageRole
     if (!roles.includes(stageRole)) return false
+    // Resolved-approver snapshot wins: only the assigned person sees it.
+    const assigned = inst.approverIds?.[inst.currentStageIndex]
+    if (assigned) return assigned.split(',').includes(user.$id)
     if (stageRole === ROLES.HOD) return true
     if (stageRole === ROLES.MODULE_LEADER) {
       // If they lead specific offerings, scope to those modules; otherwise show all ML-stage items.

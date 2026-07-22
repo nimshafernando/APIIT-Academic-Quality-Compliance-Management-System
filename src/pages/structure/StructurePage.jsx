@@ -204,7 +204,7 @@ export default function StructurePage() {
     <div>
       <PageHeader
         title={config.title}
-        subtitle={config.description || `Manage ${config.title.toLowerCase()} for the School of Computing.`}
+        subtitle={config.description || `Manage ${config.title.toLowerCase()}.`}
         actions={
           canEdit && (
             <button className="btn-primary" onClick={() => setModal({})}>

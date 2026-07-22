@@ -36,10 +36,23 @@ async function put(collection, id, data, permissions = undefined) {
   }
 }
 
+// Create-or-UPDATE helper for records whose shape evolves between seeder
+// versions (offerings/instances gained staffing + approver-routing fields).
+async function upsert(collection, id, data, permissions = undefined) {
+  try {
+    await db.createDocument(DB_ID, collection, id, data, permissions)
+    console.log(`  ✔ ${collection}/${id}`)
+  } catch (err) {
+    if (!exists(err)) throw err
+    await db.updateDocument(DB_ID, collection, id, data, permissions)
+    console.log(`  ↻ ${collection}/${id} updated`)
+  }
+}
+
 // ---------------------------------------------------------------- users ----
 const DEMO_USERS = [
   { id: 'demo-superadmin', name: 'Sanjay Perera (Super Admin)', email: 'superadmin@apiit.lk', roles: ['superadmin'] },
-  { id: 'demo-hod', name: 'Dr. Chaman Wijesiriwardana (HOD)', email: 'hod@apiit.lk', roles: ['hod'] },
+  { id: 'demo-hod', name: 'Chaman Wijesiriwardana (HOD)', email: 'hod@apiit.lk', roles: ['hod'] },
   { id: 'demo-levelcoord', name: 'Kumari Jayasuriya (Level Coordinator)', email: 'levelcoord@apiit.lk', roles: ['levelcoord', 'lecturer'] },
   { id: 'demo-moduleleader', name: 'Ruwan Fernando (Module Leader)', email: 'moduleleader@apiit.lk', roles: ['moduleleader', 'lecturer'] },
   { id: 'demo-lecturer', name: 'Tharindu Weerasinghe (Lecturer)', email: 'lecturer@apiit.lk', roles: ['lecturer'] },
@@ -100,12 +113,13 @@ async function seedStructure() {
   await put('modules', 'mod-csf101', { code: 'CSF101', name: 'Computing Foundations', programmeId: 'prog-cs-ncuk', programmeName: 'BSc (Hons) Computer Science', levelId: 'lvl-fnd', levelName: 'Foundation', variant: 'NCUK' })
 
   const offer = (id, moduleId, moduleCode, moduleName, levelId, levelName) =>
-    put('module_offerings', id, {
+    upsert('module_offerings', id, {
       moduleId, moduleCode, moduleName, levelId, levelName,
       intakeId: 'int-se-2025-sep', batchCode: 'SE-2025-SEP',
       semesterId: 'sem-2-2025', semesterName: 'Semester 2',
       moduleLeaderId: 'demo-moduleleader', moduleLeaderName: 'Ruwan Fernando (Module Leader)',
       lecturerIds: ['demo-lecturer'], lecturerNames: ['Tharindu Weerasinghe (Lecturer)'],
+      internalVerifierId: 'demo-verifier', internalVerifierName: 'Aisha Farook (Internal Verifier)',
     })
   await offer('off-com2521', 'mod-com2521', 'COM2521', 'Cloud Infrastructure & Design', 'lvl-5', 'Level 5')
   await offer('off-com2612', 'mod-com2612', 'COM2612', 'Interface Design and User Experience', 'lvl-5', 'Level 5')
@@ -128,7 +142,7 @@ async function seedAssignments() {
   const asg = (id, userId, userName, role, scopeType, scopeId = '', scopeLabel = 'School-wide') =>
     put('role_assignments', id, { userId, userName, role, scopeType, scopeId, scopeLabel, active: true })
 
-  await asg('asg-hod', 'demo-hod', 'Dr. Chaman Wijesiriwardana (HOD)', 'hod', 'global')
+  await asg('asg-hod', 'demo-hod', 'Chaman Wijesiriwardana (HOD)', 'hod', 'global')
   await asg('asg-superadmin', 'demo-superadmin', 'Sanjay Perera (Super Admin)', 'superadmin', 'global')
   await asg('asg-lc-l5', 'demo-levelcoord', 'Kumari Jayasuriya (Level Coordinator)', 'levelcoord', 'level', 'lvl-5', 'Level 5 — BSc (Hons) Software Engineering')
   await asg('asg-lc-l4', 'demo-levelcoord', 'Kumari Jayasuriya (Level Coordinator)', 'levelcoord', 'level', 'lvl-4', 'Level 4 — BSc (Hons) Software Engineering')
@@ -180,9 +194,24 @@ function instancePermissions(submitterId, stages) {
 
 const LECT = { id: 'demo-lecturer', name: 'Tharindu Weerasinghe (Lecturer)' }
 
+// Demo staffing mirror of resolveApprovers(): who each stage role routes to
+// for the seeded offerings. HOD stages stay role-wide ('').
+const DEMO_APPROVERS = {
+  verifier: { id: 'demo-verifier', name: 'Aisha Farook (Internal Verifier)' },
+  moduleleader: { id: 'demo-moduleleader', name: 'Ruwan Fernando (Module Leader)' },
+  levelcoord: { id: 'demo-levelcoord', name: 'Kumari Jayasuriya (Level Coordinator)' },
+  moderator: { id: 'demo-moderator', name: 'Shanika Rathnayake (Moderator)' },
+}
+const OFFERING_BY_MODULE = {
+  'mod-com2521': 'off-com2521',
+  'mod-com2612': 'off-com2612',
+  'mod-com1580': 'off-com1580',
+  'mod-com1451': 'off-com1451',
+}
+
 async function seedInstance(id, { template, stages, subject, title, stageIndex, status, actions, notifications }) {
   const stage = stages[stageIndex]
-  await put(
+  await upsert(
     'workflow_instances',
     id,
     {
@@ -205,6 +234,14 @@ async function seedInstance(id, { template, stages, subject, title, stageIndex, 
       submittedByName: LECT.name,
       fileIds: [],
       fileNames: [],
+      approverIds: stages.map((s) => DEMO_APPROVERS[s.role]?.id || ''),
+      approverNames: stages.map((s) => DEMO_APPROVERS[s.role]?.name || ''),
+      offeringId: OFFERING_BY_MODULE[subject.moduleId] || '',
+      programmeId: 'prog-se',
+      programmeName: 'BSc (Hons) Software Engineering',
+      semesterId: 'sem-2-2025',
+      semesterName: 'Semester 2',
+      batchCode: 'SE-2025-SEP',
     },
     instancePermissions(LECT.id, stages),
   )
@@ -330,7 +367,7 @@ async function seedInstances() {
       { userId: 'demo-verifier', userName: 'Aisha Farook (Internal Verifier)', action: 'approve', stageIndex: 0, stageLabel: 'Internal Verification (IVF)', comment: 'IVF complete.' },
       { userId: 'demo-moduleleader', userName: 'Ruwan Fernando (Module Leader)', action: 'approve', stageIndex: 1, stageLabel: 'Module Leader Approval', comment: 'Approved.' },
       { userId: 'demo-levelcoord', userName: 'Kumari Jayasuriya (Level Coordinator)', action: 'approve', stageIndex: 2, stageLabel: 'Level Coordinator Approval', comment: 'Level 5 records complete.' },
-      { userId: 'demo-hod', userName: 'Dr. Chaman Wijesiriwardana (HOD)', action: 'approve', stageIndex: 3, stageLabel: 'HOD Final Sign-off', comment: 'Signed off for ISO 21001 evidence.' },
+      { userId: 'demo-hod', userName: 'Chaman Wijesiriwardana (HOD)', action: 'approve', stageIndex: 3, stageLabel: 'HOD Final Sign-off', comment: 'Signed off for ISO 21001 evidence.' },
     ],
     notifications: [{ userId: LECT.id, type: 'approved', message: '"Module Descriptor & IVF — Semester 1" has received final sign-off. The record is now locked.' }],
   })
@@ -380,10 +417,10 @@ async function seedDeadlines() {
     )
 
   await task('task-emr-overdue', 'Submit End of Module Report', 'demo-lecturer', 'Tharindu Weerasinghe (Lecturer)', 'lecturer', -5, 'COM2521 · SE-2025-SEP', { ruleId: 'rule-emr' })
-  await task('task-resit', 'Prepare re-sit examination paper', 'demo-lecturer', 'Tharindu Weerasinghe (Lecturer)', 'lecturer', 3, 'COM2612 · SE-2025-SEP', { source: 'manual', createdByName: 'Dr. Chaman Wijesiriwardana (HOD)' })
+  await task('task-resit', 'Prepare re-sit examination paper', 'demo-lecturer', 'Tharindu Weerasinghe (Lecturer)', 'lecturer', 3, 'COM2612 · SE-2025-SEP', { source: 'manual', createdByName: 'Chaman Wijesiriwardana (HOD)' })
   await task('task-imf-overdue', 'Complete internal moderation (IMF)', 'demo-moderator', 'Shanika Rathnayake (Moderator)', 'moderator', -1, 'COM2521 · Moderation Cycle', { ruleId: 'rule-moderation' })
   await task('task-lss-ml', 'Approve lesson sequence sheets', 'demo-moduleleader', 'Ruwan Fernando (Module Leader)', 'moduleleader', 10, 'COM2521 · Sem 1 2026/27', { ruleId: 'rule-lss', semesterId: 'sem-1-2026', semesterName: 'Semester 1 2026/27' })
-  await task('task-hod-signoff', 'Sign off Semester 2 subject files', 'demo-hod', 'Dr. Chaman Wijesiriwardana (HOD)', 'hod', 14, 'School-wide', { source: 'manual', createdByName: 'Dr. Chaman Wijesiriwardana (HOD)' })
+  await task('task-hod-signoff', 'Sign off Semester 2 subject files', 'demo-hod', 'Chaman Wijesiriwardana (HOD)', 'hod', 14, 'School-wide', { source: 'manual', createdByName: 'Chaman Wijesiriwardana (HOD)' })
 }
 
 /* ------------------------------------------------ subject file slots ------- */
@@ -479,7 +516,7 @@ async function seedCasesGovernance() {
   await put('risk_register', 'risk-1', {
     title: 'Assessment briefs at risk of missing the 9-week deadline for Sem 1 2026/27',
     description: 'Two Level 5 modules have no assigned internal verifier for the coming semester.',
-    owner: 'Dr. Chaman Wijesiriwardana', severity: 'high', status: 'open',
+    owner: 'Chaman Wijesiriwardana', severity: 'high', status: 'open',
     reviewDate: new Date(Date.now() + 14 * 86400000).toISOString(),
   })
   await put('risk_register', 'risk-2', {
@@ -517,7 +554,7 @@ async function seedCasesGovernance() {
       staffUserId: 'demo-lecturer', staffName: 'Tharindu Weerasinghe (Lecturer)', cycle: '2025/26',
       goals: '1. Complete PGCHE module.\n2. Reduce marking turnaround to under 2 weeks.\n3. Co-author one applied research output.',
       reviewComments: 'Consistently strong student feedback (4.5/5). Marking deadlines met in Semester 2 after Semester 1 slippage.',
-      outcomeRating: 'meets', status: 'completed', updatedByName: 'Dr. Chaman Wijesiriwardana (HOD)',
+      outcomeRating: 'meets', status: 'completed', updatedByName: 'Chaman Wijesiriwardana (HOD)',
     },
     apprPerms('demo-lecturer'),
   )
@@ -527,7 +564,7 @@ async function seedCasesGovernance() {
     {
       staffUserId: 'demo-moduleleader', staffName: 'Ruwan Fernando (Module Leader)', cycle: '2025/26',
       goals: 'Lead the NCUK variant rollout for Level 4 modules; mentor two new lecturers.',
-      reviewComments: '', outcomeRating: '', status: 'draft', updatedByName: 'Dr. Chaman Wijesiriwardana (HOD)',
+      reviewComments: '', outcomeRating: '', status: 'draft', updatedByName: 'Chaman Wijesiriwardana (HOD)',
     },
     apprPerms('demo-moduleleader'),
   )

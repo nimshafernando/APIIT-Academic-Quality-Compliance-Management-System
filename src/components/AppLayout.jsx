@@ -133,7 +133,7 @@ function SidebarBrand() {
       </span>
       <div>
         <p className="text-sm font-extrabold tracking-wide text-white">AQCMS</p>
-        <p className="text-[10px] font-medium tracking-wide text-white/40">School of Computing</p>
+        <p className="text-[10px] font-medium tracking-wide text-white/40">APIIT</p>
       </div>
     </div>
   )

@@ -64,7 +64,7 @@ export default function Appraisals() {
           Permission.update(Role.label(ROLES.HOD)),
           Permission.delete(Role.label(ROLES.HOD)),
         ])
-        await notify(form.staffUserId, 'appraisal', `Your ${form.cycle} appraisal record has been ${form.status === 'completed' ? 'completed' : 'started'} by the HOD.`)
+        await notify(form.staffUserId, 'appraisal', `Your ${form.cycle} appraisal record has been ${form.status === 'completed' ? 'completed' : 'started'} by the HOD.`, '', user.name)
       }
       setModal(null)
       await load()

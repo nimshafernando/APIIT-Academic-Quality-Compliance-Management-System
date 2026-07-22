@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { databases, storage, DB_ID, COL, BUCKET_ID, ID, Permission, Role, listAll, Query, fmtDate } from '../../lib/appwrite'
-import { fileDownloadUrl } from '../../lib/workflow'
+import { downloadFile } from '../../lib/workflow'
 import { useAuth } from '../../context/AuthContext'
 import { PageHeader, Spinner, EmptyState, ErrorBanner, StatusBadge, Modal, Table } from '../../components/UI'
 import Icon from '../../components/Icons'
@@ -272,9 +272,9 @@ function DocsTab() {
                 <p className="text-xs text-gray-400">{d.category} · v{d.version || 1}{d.notes && ` · ${d.notes}`}</p>
               </div>
               {d.fileId && (
-                <a href={fileDownloadUrl(d.fileId)} className="btn-secondary flex-shrink-0 !px-3 !py-1.5 text-xs">
+                <button onClick={() => downloadFile(d.fileId, d.fileName)} className="btn-secondary flex-shrink-0 !px-3 !py-1.5 text-xs">
                   <Icon name="download" className="h-3.5 w-3.5" />
-                </a>
+                </button>
               )}
             </div>
           ))}

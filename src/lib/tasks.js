@@ -19,6 +19,7 @@ export async function createTask(data, creator) {
       'task_due',
       `New task assigned by ${creator.name}: "${data.title}" — due ${new Date(data.dueDate).toLocaleDateString('en-GB')}.`,
       doc.$id,
+      creator.name,
     )
   }
   return doc

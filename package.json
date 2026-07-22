@@ -2,7 +2,7 @@
   "name": "aqcms",
   "private": true,
   "version": "1.0.0",
-  "description": "Academic Quality & Compliance Management System - School of Computing (APIIT)",
+  "description": "Academic Quality & Compliance Management System (APIIT)",
   "type": "module",
   "scripts": {
     "dev": "vite",

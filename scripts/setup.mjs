@@ -7,7 +7,7 @@
 // Usage: node scripts/setup.mjs
 import 'dotenv/config'
 import { execSync } from 'node:child_process'
-import { Client, Databases, Storage, Functions, Permission, Role } from 'node-appwrite'
+import { Client, Databases, Storage, Functions, Permission, Role, Query } from 'node-appwrite'
 import { InputFile } from 'node-appwrite/file'
 
 const { APPWRITE_ENDPOINT, APPWRITE_PROJECT_ID, APPWRITE_API_KEY } = process.env
@@ -174,6 +174,8 @@ const COLLECTIONS = [
       str('moduleLeaderName', 256),
       str('lecturerIds', 64, false, true),
       str('lecturerNames', 256, false, true),
+      str('internalVerifierId', 64),
+      str('internalVerifierName', 256),
     ],
     indexes: [idx('i_moduleLeaderId', ['moduleLeaderId'])],
   },
@@ -234,6 +236,16 @@ const COLLECTIONS = [
       str('submittedByName', 256),
       str('fileIds', 64, false, true),
       str('fileNames', 512, false, true),
+      // Per-stage resolved approvers, aligned with stagesJson. Each entry is a
+      // comma-joined list of userIds; '' = any holder of the stage role.
+      str('approverIds', 512, false, true),
+      str('approverNames', 512, false, true),
+      str('offeringId', 64),
+      str('programmeId', 64),
+      str('programmeName', 256),
+      str('semesterId', 64),
+      str('semesterName', 128),
+      str('batchCode', 128),
     ],
     indexes: [
       idx('i_submittedBy', ['submittedBy']),
@@ -262,7 +274,7 @@ const COLLECTIONS = [
     name: 'Notifications',
     documentSecurity: true,
     permissions: [P.createUsers], // read/update granted per-document to the recipient only
-    attributes: [str('userId', 64, true), str('type', 64), str('message', 1024), str('relatedId', 64), bool('read', false)],
+    attributes: [str('userId', 64, true), str('type', 64), str('message', 1024), str('relatedId', 64), bool('read', false), str('fromName', 256)],
     indexes: [idx('i_userId', ['userId']), idx('i_read', ['read'])],
   },
 
@@ -493,7 +505,8 @@ async function ensureCollections() {
     }
     // Limit checks run before duplicate checks on Appwrite, so query what
     // already exists instead of relying on 409s.
-    const existing = new Set((await databases.listAttributes(DB_ID, c.id)).attributes.map((a) => a.key))
+    // Default page size is 25 and some collections have more attributes.
+    const existing = new Set((await databases.listAttributes(DB_ID, c.id, [Query.limit(100)])).attributes.map((a) => a.key))
     for (const a of c.attributes) {
       if (existing.has(a.key)) continue
       if (a.kind === 'string') await databases.createStringAttribute(DB_ID, c.id, a.key, a.size, a.required, undefined, a.array)
@@ -505,7 +518,7 @@ async function ensureCollections() {
   console.log('… waiting for attributes to become available')
   await sleep(6000)
   for (const c of COLLECTIONS) {
-    const existingIdx = new Set((await databases.listIndexes(DB_ID, c.id)).indexes.map((i) => i.key))
+    const existingIdx = new Set((await databases.listIndexes(DB_ID, c.id, [Query.limit(100)])).indexes.map((i) => i.key))
     for (const i of c.indexes) {
       if (existingIdx.has(i.key)) continue
       for (let attempt = 0; attempt < 5; attempt++) {
@@ -562,12 +575,17 @@ const FUNCTIONS = [
       `databases.${DB_ID}.collections.document_slots.documents.*.create`,
       `databases.${DB_ID}.collections.document_slots.documents.*.update`,
     ],
-    execute: ['label:superadmin', 'label:hod'], // manual trigger allowed
+    // 'any' so the signed approve/decline links in emails work for guests
+    // hitting the function domain; the handler itself verifies an HMAC token,
+    // and cron mode only runs for scheduled/authenticated executions.
+    execute: ['any'],
     scopes: ['databases.read', 'collections.read', 'attributes.read', 'documents.read', 'documents.write', 'buckets.read', 'files.read', 'files.write'],
     variables: {
       RESEND_API_KEY: process.env.RESEND_API_KEY || '',
       EMAIL_DEMO_REDIRECT: process.env.EMAIL_DEMO_REDIRECT || '',
       SITE_URL: 'https://aqcms-soc.appwrite.network',
+      EMAIL_ACTION_SECRET: process.env.EMAIL_ACTION_SECRET || '',
+      ACTIONS_URL: 'https://aqcms-actions.appwrite.network',
     },
   },
 ]
@@ -639,9 +657,29 @@ async function ensureFunctions() {
   }
 }
 
+// Public HTTP domain for deadline-engine so approve/decline links in emails
+// can reach it (function rules track the active deployment automatically).
+async function ensureFunctionDomain() {
+  const headers = { 'X-Appwrite-Project': APPWRITE_PROJECT_ID, 'X-Appwrite-Key': APPWRITE_API_KEY }
+  const rules = await (await fetch(`${APPWRITE_ENDPOINT}/proxy/rules`, { headers })).json()
+  const existing = (rules.rules || []).find((r) => r.deploymentResourceId === 'deadline-engine' && r.trigger !== 'deployment')
+  if (existing) {
+    console.log(`• function domain exists: https://${existing.domain}`)
+    return
+  }
+  const res = await fetch(`${APPWRITE_ENDPOINT}/proxy/rules/function`, {
+    method: 'POST',
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ domain: 'aqcms-actions.appwrite.network', functionId: 'deadline-engine' }),
+  })
+  if (!res.ok) throw new Error(`function domain rule failed: ${(await res.json()).message}`)
+  console.log('✔ function domain created: https://aqcms-actions.appwrite.network')
+}
+
 console.log(`Provisioning AQCMS backend on ${APPWRITE_ENDPOINT} (project ${APPWRITE_PROJECT_ID})…`)
 await ensureDatabase()
 await ensureCollections()
 await ensureBucket()
 await ensureFunctions()
+await ensureFunctionDomain()
 console.log('\nDone. Next: node scripts/seed.mjs')

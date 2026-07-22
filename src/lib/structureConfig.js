@@ -178,6 +178,11 @@ export const STRUCTURE_ENTITIES = {
         ref: { collection: COL.PROFILES, labelKey: 'name', valueKey: 'userId' },
         denormArray: { lecturerNames: 'name' },
       },
+      {
+        key: 'internalVerifierId', label: 'Internal Verifier', type: 'select',
+        ref: { collection: COL.PROFILES, labelKey: 'name', valueKey: 'userId' },
+        denorm: { internalVerifierName: 'name' },
+      },
     ],
     columns: [
       { key: 'moduleCode', label: 'Module' },
@@ -185,6 +190,7 @@ export const STRUCTURE_ENTITIES = {
       { key: 'semesterName', label: 'Semester' },
       { key: 'moduleLeaderName', label: 'Module Leader' },
       { key: 'lecturerNames', label: 'Lecturers', type: 'array' },
+      { key: 'internalVerifierName', label: 'Internal Verifier' },
     ],
   },
 
